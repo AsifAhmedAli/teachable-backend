@@ -82,7 +82,7 @@ router.put(
 // GET SINGLE STUDENT
 
 router.get(
-    "/get-single-student",
+    "/get-single-student/:student_id",
     isStudent,
     students_controller.get_single_student
     
@@ -117,6 +117,32 @@ router.post(
     "/student-logout",
     isStudent,
     students_controller.student_logout
+    
+  );
+// GET STUDENT COURSES
+
+router.get(
+    "/get-student-courses/:student_id",
+    isStudent,
+    students_controller.get_student_courses
+    
+  );
+
+// GET STUDENT COURSES
+
+router.get(
+    "/get-single-course/:course_id/:student_id",
+    isStudent,
+    students_controller.get_single_course
+    
+  );
+
+// GET STUDENT COURSES
+
+router.get(
+    "/search-courses/search",
+    isStudent,
+    students_controller.search_courses
     
   );
 

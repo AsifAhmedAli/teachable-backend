@@ -125,8 +125,19 @@ const get_students_enrolled_in_teacher_course = async (req, res) => {
 // ### UPLOAD VIDEO TO COURSE 
 
 const upload_video_to_course = async (req, res) => {
+     // Validate request data using Joi
+     const schema = Joi.object({
+        
+        courseId: Joi.number().required(),
+        video_title: Joi.string().required(),
+    });
+
+    const { error } = schema.validate(req.body);
+    if (error) {
+        return res.status(400).json({ error: error.details[0].message });
+    }
     try {
-        const {courseId} = req.body; 
+        const {courseId,video_title} = req.body; 
      
 
         if (!req.file) {
@@ -147,8 +158,8 @@ const upload_video_to_course = async (req, res) => {
         await fs.unlink(tempFilePath);
 
         // Insert video details into the videos table
-        const insertVideoQuery = 'INSERT INTO videos (course_id, video_url) VALUES (?, ?)';
-        const videoValues = [courseId, cloudinaryResult.secure_url];
+        const insertVideoQuery = 'INSERT INTO videos (course_id,video_title, video_url) VALUES (?, ?, ?)';
+        const videoValues = [courseId,video_title, cloudinaryResult.secure_url];
         await db.query(insertVideoQuery, videoValues);
 
         res.status(201).json({ message: 'Video uploaded successfully' });

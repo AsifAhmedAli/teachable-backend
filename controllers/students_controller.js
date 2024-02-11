@@ -388,10 +388,15 @@ const edit_profile = async (req, res) => {
 
     //   console.log(req.user)
   
-      // Check if the authenticated user's ID matches the requested student_id
-      if (student_id !== req.user.studentId) {
-        return res.status(403).json({ error: 'You are not authorized to update this profile' });
-      }
+      // // Check if the authenticated user's ID matches the requested student_id
+      // if (student_id != req.user.studentId) {
+      //   return res.status(403).json({ error: 'You are not authorized to update this profile' });
+      // }
+
+      
+      // if (!name || !email) {
+      //   return res.status(404).json({ error: 'field can not be empty' });
+      // }
   
       // Check if the student exists in the database
       const [student] = await db.query('SELECT * FROM students WHERE student_id = ?', [student_id]);
@@ -427,7 +432,7 @@ const change_password = async (req, res) => {
     // Define a schema for changing student password
 const changeStudentPasswordSchema = Joi.object({
     student_id: Joi.number().required(),
-    new_password: Joi.string().required().min(6), // Adjust the minimum length as needed
+    new_password: Joi.string().required(),
     confirm_new_password: Joi.string()
       .required()
       .valid(Joi.ref('new_password'))
@@ -438,10 +443,10 @@ const changeStudentPasswordSchema = Joi.object({
       
       const {student_id, new_password, confirm_new_password } = req.body;
   
-      // Check if the authenticated user's ID matches the requested student_id
-      if (student_id !== req.user.studentId) {
-        return res.status(403).json({ error: 'You are not authorized to change this password' });
-      }
+      // // Check if the authenticated user's ID matches the requested student_id
+      // if (student_id != req.user.studentId) {
+      //   return res.status(403).json({ error: 'You are not authorized to change this password' });
+      // }
   
       // Validate the provided data against the schema
       const { error } = changeStudentPasswordSchema.validate(req.body);
@@ -729,11 +734,11 @@ const edit_delivery_address = async (req, res) => {
 const get_single_student = async (req, res) => {
     try {
       // Get the student_id from body
-      const { student_id } = req.body;
-       // Check if the authenticated user's ID matches the requested student_id
-       if (student_id !== req.user.studentId) {
-        return res.status(403).json({ error: 'You are not authorized to perform this action' });
-      }
+      const { student_id } = req.params;
+      //  // Check if the authenticated user's ID matches the requested student_id
+      //  if (student_id != req.user.studentId) {
+      //   return res.status(403).json({ error: 'You are not authorized to perform this action' });
+      // }
   
       // Check if the student exists in the database
       const [student] = await db.query('SELECT * FROM students WHERE student_id = ?', [student_id]);
@@ -741,7 +746,8 @@ const get_single_student = async (req, res) => {
       if (student.length === 0) {
         return res.status(404).json({ error: 'Student not found' });
       }
-  
+      
+     
       // Return the student's profile information
       return res.status(200).json({ student: student[0] });
     } catch (error) {
@@ -854,6 +860,150 @@ const student_logout = (req, res) => {
     }
   };
   
+// ####### GET STUDENT COURSES
+
+const get_student_courses = async (req, res) => {
+  try {
+    // Get the student_id from the params
+    const { student_id } = req.params;
+
+    // Assuming you have a linking table named student_courses
+    const query = `
+      SELECT courses.course_id, courses.title, courses.description, courses.status,courses.created_at,
+             videos.video_id, videos.video_title, videos.video_url
+      FROM courses
+      INNER JOIN enrollments ON courses.course_id = enrollments.course_id
+      LEFT JOIN videos ON courses.course_id = videos.course_id
+      WHERE enrollments.student_id = ?
+      GROUP BY courses.course_id, videos.video_id
+    `;
+
+    const [courses] = await db.query(query, [student_id]);
+
+    // Group videos by course_id
+    const coursesWithVideos = courses.reduce((acc, item) => {
+      const existingCourse = acc.find(c => c.course_id === item.course_id);
+
+      if (existingCourse) {
+        if (item.video_id) {
+          existingCourse.videos.push({
+            video_id: item.video_id,
+            video_url: item.video_url,
+            video_title: item.video_title,
+          });
+        }
+      } else {
+        acc.push({
+          course_id: item.course_id,
+          title: item.title,
+          description: item.description,
+          status: item.status,
+          created_at: item.created_at,
+          videos: item.video_id
+            ? [{ video_id: item.video_id, video_url: item.video_url, video_title: item.video_title }]
+            : [],
+        });
+      }
+
+      return acc;
+    }, []);
+
+    res.json({ courses: coursesWithVideos });
+  } catch (error) {
+    console.error('Error retrieving courses:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+
+
+// #### GET SINGLE COURSE DETAILS
+
+const get_single_course = async (req, res) => {
+  try {
+    const { student_id, course_id } = req.params;
+
+    // Assuming you have a linking table named student_courses
+    const query = `
+      SELECT courses.course_id, courses.title, courses.description, courses.status,
+             videos.video_id, videos.video_title, videos.video_url
+      FROM courses
+      INNER JOIN enrollments ON courses.course_id = enrollments.course_id
+      LEFT JOIN videos ON courses.course_id = videos.course_id
+      WHERE enrollments.student_id = ? AND courses.course_id = ?
+      GROUP BY courses.course_id, videos.video_id
+    `;
+
+    const [course] = await db.query(query, [student_id, course_id]);
+
+    // If the course is not found, return a 404 status
+    if (!course.length) {
+      return res.status(404).json({ error: 'Course not found for the specified student' });
+    }
+
+    // Group videos by course_id
+    const courseWithVideos = course.reduce((acc, item) => {
+      const existingCourse = acc.find(c => c.course_id === item.course_id);
+    
+      if (existingCourse) {
+        if (item.video_id) {
+          existingCourse.videos.push({
+            video_id: item.video_id,
+            video_url: item.video_url,
+            video_title: item.video_title,
+          });
+        }
+      } else {
+        acc.push({
+          course_id: item.course_id,
+          title: item.title,
+          description: item.description,
+          status: item.status,
+          videos: item.video_id
+            ? [{ video_id: item.video_id, video_url: item.video_url, video_title: item.video_title }]
+            : [],
+        });
+      }
+    
+      return acc;
+    }, []);
+    
+
+    res.json({ course: courseWithVideos[0] }); // Assuming the result is a single course
+  } catch (error) {
+    console.error('Error retrieving single course:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+
+// SEARCH COURSES API
+
+const search_courses = async (req, res) => {
+  try {
+    const { query } = req.query;
+
+    // Assuming you have a courses table with title and description fields
+    const searchQuery = `
+      SELECT course_id, title, description, status, created_at
+      FROM courses
+      WHERE title LIKE ? OR description LIKE ?
+    `;
+
+    const [courses] = await db.query(searchQuery, [`%${query}%`, `%${query}%`]);
+
+    res.json({ courses: courses });
+  } catch (error) {
+    console.error('Error searching courses:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+
+};
+
+
+
+
+
 
   module.exports = {
     student_login,
@@ -869,7 +1019,11 @@ const student_logout = (req, res) => {
     get_credit_card_details,
     get_billing_address,
     get_delivery_address,
-    student_logout
+    student_logout,
+    get_student_courses,
+    get_single_course,
+    search_courses
+
 
      
    };
