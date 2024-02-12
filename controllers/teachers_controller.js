@@ -69,32 +69,49 @@ const teacher_login = async (req, res) => {
 // ########## GET COURSES TAUGHT BY A TEACHER
 const get_courses_taught_by_teacher = async (req, res) => {
     try {
-        const { teacherId } = req.params;
-
-        // Retrieve courses taught by the teacher along with associated videos
-        const selectQuery = `
-            SELECT courses.*, GROUP_CONCAT(videos.video_url) AS video_urls
-            FROM courses
-            LEFT JOIN videos ON courses.course_id = videos.course_id
-            WHERE courses.teacher_id = ?
-            GROUP BY courses.course_id
-        `;
-
-        const [courses] = await db.query(selectQuery, [teacherId]);
-
-        // Parse the video_urls string into an array
-        courses.forEach(course => {
-            if (course.video_urls) {
-                course.video_urls = course.video_urls.split(',');
-            }
+      const { teacherId } = req.params;
+  
+      // Retrieve courses taught by the teacher along with associated videos
+      const selectQuery = `
+        SELECT courses.course_id, courses.title, courses.description, courses.status, courses.created_at,
+               GROUP_CONCAT(videos.video_id) AS video_ids,
+               GROUP_CONCAT(videos.video_title) AS video_titles,
+               GROUP_CONCAT(videos.video_url) AS video_urls
+        FROM courses
+        LEFT JOIN videos ON courses.course_id = videos.course_id
+        WHERE courses.teacher_id = ?
+        GROUP BY courses.course_id
+      `;
+  
+      const [courses] = await db.query(selectQuery, [teacherId]);
+  
+      // Process the results to group courses and their associated videos
+      const coursesWithVideos = courses.reduce((acc, item) => {
+        acc.push({
+          course_id: item.course_id,
+          title: item.title,
+          description: item.description,
+          status: item.status,
+          created_at: item.created_at,
+          videos: item.video_ids
+            ? item.video_ids.split(',').map((videoId, index) => ({
+                video_id: videoId,
+                video_title: item.video_titles.split(',')[index],
+                video_url: item.video_urls.split(',')[index],
+              }))
+            : [],
         });
-
-        res.status(200).json({ courses });
+  
+        return acc;
+      }, []);
+  
+      res.status(200).json({ courses: coursesWithVideos });
     } catch (error) {
-        console.error('Error getting courses taught by teacher:', error);
-        res.status(500).json({ error: 'Internal server error' });
+      console.error('Error getting courses taught by teacher:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
-};
+  };
+  
 
 
   
@@ -170,11 +187,233 @@ const upload_video_to_course = async (req, res) => {
 };
 
 
+// SEARCH COURSE
+
+const search_courses = async (req, res) => {
+    try {
+      const { query } = req.query;
+      const { teacherId } = req.params;
+  
+      // Assuming you have a courses table with title, description, teacher_id, status, and created_at fields
+      const searchQuery = `
+        SELECT course_id, title, description, status, created_at
+        FROM courses
+        WHERE (title LIKE ? OR description LIKE ?)
+        AND teacher_id = ?
+      `;
+  
+      const queryParams = [`%${query}%`, `%${query}%`, teacherId];
+  
+      const [courses] = await db.query(searchQuery, queryParams);
+  
+      if (courses.length === 0) {
+        res.json({ message: 'No courses found for the given criteria.' });
+      } else {
+        res.json({ courses: courses });
+      }
+    } catch (error) {
+      console.error('Error searching courses:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  };
+  
+
+
+
+
+//   ##### GET SINGLE COURSE 
+
+const get_single_course = async (req, res) => {
+    try {
+      const { teacher_id, course_id } = req.params;
+  
+      // Assuming you have a linking table named student_courses
+      const query = `
+        SELECT courses.course_id, courses.title, courses.description, courses.status,
+               videos.video_id, videos.video_title, videos.video_url
+        FROM courses
+        LEFT JOIN videos ON courses.course_id = videos.course_id
+        WHERE courses.teacher_id = ? AND courses.course_id = ?
+        GROUP BY courses.course_id, videos.video_id
+      `;
+  
+      const [course] = await db.query(query, [teacher_id, course_id]);
+  
+      // If the course is not found, return a 404 status
+      if (!course.length) {
+        return res.status(404).json({ error: 'Course not found for the specified teacher' });
+      }
+  
+      // Group videos by course_id
+      const courseWithVideos = course.reduce((acc, item) => {
+        const existingCourse = acc.find(c => c.course_id === item.course_id);
+  
+        if (existingCourse) {
+          if (item.video_id) {
+            existingCourse.videos.push({
+              video_id: item.video_id,
+              video_url: item.video_url,
+              video_title: item.video_title,
+            });
+          }
+        } else {
+          acc.push({
+            course_id: item.course_id,
+            title: item.title,
+            description: item.description,
+            status: item.status,
+            videos: item.video_id
+              ? [{ video_id: item.video_id, video_url: item.video_url, video_title: item.video_title }]
+              : [],
+          });
+        }
+  
+        return acc;
+      }, []);
+  
+      res.json({ course: courseWithVideos[0] }); // Assuming the result is a single course
+    } catch (error) {
+      console.error('Error retrieving single course:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  };
+  
+
+
+//  #### GET SINGLE TEACHER
+
+const get_single_teacher = async (req, res) => {
+    try {
+      // Get the teacher_id from params
+      const { teacher_id } = req.params;
+  
+      // Check if the teacher exists in the database
+      const [teacher] = await db.query('SELECT * FROM teachers WHERE teacher_id = ?', [teacher_id]);
+  
+      if (teacher.length === 0) {
+        return res.status(404).json({ error: 'Teacher not found' });
+      }
+  
+      // Return the teacher's profile information
+      return res.status(200).json({ teacher: teacher[0] });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+  
+
+//   EDIT PROFILE API
+
+const edit_profile = async (req, res) => {
+    try {
+      const { teacher_id, name, email } = req.body;
+  
+      // Check if the teacher exists in the database
+      const [teacher] = await db.query('SELECT * FROM teachers WHERE teacher_id = ?', [teacher_id]);
+  
+      if (teacher.length === 0) {
+        return res.status(404).json({ error: 'Teacher not found' });
+      }
+  
+      // Update teacher credentials
+      const updateData = {};
+      if (name) {
+        updateData.name = name;
+      }
+      if (email) {
+        updateData.email = email;
+      }
+  
+      await db.query('UPDATE teachers SET ? WHERE teacher_id = ?', [updateData, teacher_id]);
+  
+      return res.json({ message: 'Teacher credentials updated successfully' });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+ 
+  
+//   ###3 CHANGE PASSWORD API
+
+// Define a schema for changing teacher password
+const changeTeacherPasswordSchema = Joi.object({
+  teacher_id: Joi.number().required(),
+  new_password: Joi.string().required(),
+  confirm_new_password: Joi.string()
+    .required()
+    .valid(Joi.ref('new_password'))
+    .messages({ 'any.only': 'Passwords do not match' }),
+});
+
+const change_password = async (req, res) => {
+  try {
+    const { teacher_id, new_password, confirm_new_password } = req.body;
+
+    // Validate the provided data against the schema
+    const { error } = changeTeacherPasswordSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: error.details[0].message });
+    }
+
+    // Update the password with the new one (hash the new password)
+    const hashedNewPassword = await bcrypt.hash(new_password, 10); // Implement your password hashing logic
+    await db.query('UPDATE teachers SET password = ? WHERE teacher_id = ?', [hashedNewPassword, teacher_id]);
+
+    return res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
+// #### TEACHER LOGOUT
+
+
+
+const teacher_logout = (req, res) => {
+    try {
+        // Clear the JWT token from the cookie
+        res.clearCookie('teachablesteacheraccesstoken');
+
+        res.status(200).json({ message: 'Logout successful' });
+    } catch (error) {
+        console.error('Error during teacher logout:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+ 
+  
+
+  
+ 
+  
+  
+ 
+  
+
+  
+  
+ 
+  
+  
+ 
+  
+
 module.exports = {
    teacher_login,
    get_courses_taught_by_teacher,
    get_students_enrolled_in_teacher_course,
-   upload_video_to_course
+   upload_video_to_course,
+   search_courses,
+   get_single_course,
+   get_single_teacher,
+   edit_profile,
+   change_password,
+   teacher_logout
 
     
   };

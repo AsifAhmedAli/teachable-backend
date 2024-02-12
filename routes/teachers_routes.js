@@ -44,8 +44,56 @@ router.post(
     
   );
 
+// SEARCH COURSE
+
+router.get(
+    "/search-courses/search/:teacherId",
+    isTeacher,
+    teachers_controller.search_courses
+    
+  );
 
 
+  // GET SINGLR COURSE TAUGHT BY TEACHER
+
+router.get(
+    "/get-single-course-taught-by-teacher/:course_id/:teacher_id",
+    isTeacher,
+    teachers_controller.get_single_course
+
+)
+  // GET SINGLE TEACHER
+
+router.get(
+    "/get-single-teacher/:teacher_id",
+    isTeacher,
+    teachers_controller.get_single_teacher
+
+)
+  // EDIT TEACHER PROFILE
+
+router.put(
+    "/edit-profile",
+    isTeacher,
+    teachers_controller.edit_profile
+
+)
+  // CHNAGE PASSWORD
+
+router.put(
+    "/change-password",
+    isTeacher,
+    teachers_controller.change_password
+
+)
+  // TEACHER LOGOUT
+
+router.post(
+    "/teacher-logout",
+    isTeacher,
+    teachers_controller.teacher_logout
+
+)
 
 
 
