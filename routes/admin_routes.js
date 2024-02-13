@@ -83,6 +83,18 @@ router.get(
     admin_controller.get_single_student
     
   );
+  router.get(
+    "/get-all-courses",
+    isAdmin,
+    admin_controller.get_all_courses
+    
+  );
+  router.get(
+    "/get-course-details",
+    isAdmin,
+    admin_controller.get_course_details
+    
+  );
 
 
             

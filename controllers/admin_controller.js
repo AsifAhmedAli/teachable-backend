@@ -337,6 +337,101 @@ const get_single_student = async (req, res) => {
     }
   };
   
+// ##### GET ALL COURSES
+
+const get_all_courses = async (req, res) => {
+    try {
+        // Retrieve all courses along with associated videos
+        const selectQuery = `
+            SELECT courses.course_id, courses.title, courses.description, courses.status, courses.created_at,
+                GROUP_CONCAT(videos.video_id) AS video_ids,
+                GROUP_CONCAT(videos.video_title) AS video_titles,
+                GROUP_CONCAT(videos.video_url) AS video_urls
+            FROM courses
+            LEFT JOIN videos ON courses.course_id = videos.course_id
+            GROUP BY courses.course_id
+        `;
+
+        const [courses] = await db.query(selectQuery);
+
+        // Process the results to group courses and their associated videos
+        const coursesWithVideos = courses.reduce((acc, item) => {
+            acc.push({
+                course_id: item.course_id,
+                title: item.title,
+                description: item.description,
+                status: item.status,
+                created_at: item.created_at,
+                videos: item.video_ids
+                    ? item.video_ids.split(',').map((videoId, index) => ({
+                        video_id: videoId,
+                        video_title: item.video_titles.split(',')[index],
+                        video_url: item.video_urls.split(',')[index],
+                    }))
+                    : [],
+            });
+
+            return acc;
+        }, []);
+
+        res.status(200).json({ courses: coursesWithVideos });
+    } catch (error) {
+        console.error('Error getting all courses:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+
+//### GET COURSE DETAILS
+
+
+const get_course_details = async (req, res) => {
+    try {
+        const { courseId } = req.query;
+
+        // Retrieve course details with associated videos
+        const selectQuery = `
+            SELECT courses.course_id, courses.title, courses.description, courses.status, courses.created_at,
+                GROUP_CONCAT(videos.video_id) AS video_ids,
+                GROUP_CONCAT(videos.video_title) AS video_titles,
+                GROUP_CONCAT(videos.video_url) AS video_urls
+            FROM courses
+            LEFT JOIN videos ON courses.course_id = videos.course_id
+            WHERE courses.course_id = ?
+            GROUP BY courses.course_id
+        `;
+
+        const [courseDetails] = await db.query(selectQuery, [courseId]);
+
+        if (courseDetails.length > 0) {
+            const course = {
+                course_id: courseDetails[0].course_id,
+                title: courseDetails[0].title,
+                description: courseDetails[0].description,
+                status: courseDetails[0].status,
+                created_at: courseDetails[0].created_at,
+                videos: courseDetails[0].video_ids
+                    ? courseDetails[0].video_ids.split(',').map((videoId, index) => ({
+                        video_id: videoId,
+                        video_title: courseDetails[0].video_titles.split(',')[index],
+                        video_url: courseDetails[0].video_urls.split(',')[index],
+                    }))
+                    : [],
+            };
+
+            res.status(200).json({ course: course });
+        } else {
+            console.error(`Course with ID ${courseId} not found`);
+            res.status(404).json({ error: 'Course not found' });
+        }
+    } catch (error) {
+        console.error('Error getting course details:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+
+
 
 
   module.exports = {
@@ -350,6 +445,9 @@ const get_single_student = async (req, res) => {
     get_all_teachers,
     get_single_teacher,
     get_single_student,
+    get_all_courses,
+    get_course_details
+
     
 
      
