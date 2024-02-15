@@ -28,7 +28,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 
-const port = process.env.PORT || 9000;
+const port = 3000;
 
 app.use("/api/admin/", admin_router);
 app.use("/api/teachers/", teachers_router);
